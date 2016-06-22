@@ -353,6 +353,12 @@ class RedlimeSetAssignedCommand(sublime_plugin.TextCommand):
         if issue_id:
             issue = redmine.issue.get(issue_id)
             groups = rl_get_setting('assigned_to_group_id_filter', [])  # user group filter
+            queries_filters = rl_get_setting('assigned_to_query_id_filter', []) # presaved query
+            # if queries_filters:
+            #     for query_filter_id in queries_filters:
+            #         for user in redlime.user.filter(query_id=query_filter_id):
+            #             if user.id not in [user.id for user in users]:
+            #                 user.append(user)
             if groups:
                 for group_id in groups:
                     for user in redmine.user.filter(group_id=group_id):
@@ -442,6 +448,7 @@ class RedlimeGoRedmineCommand(sublime_plugin.TextCommand):
         issue_id = self.view.settings().get('issue_id', None)
         if issue_id:
             url = '%s/issues/%s' % (rl_get_setting('redmine_url').rstrip('/'), issue_id)
+            print(url);
             webbrowser.open(url)
 
 
@@ -565,6 +572,14 @@ class RedlimeFetcherCommand(sublime_plugin.TextCommand):
         r.settings().set('redlime_issue', True)
         r.settings().set('issue_id', issue.id)
 
+        setting_relations = rl_get_setting('relations', '')
+        import pprint
+        pprint.pprint(setting_relations)
+
+        # print pr
+        # sublime.error_message(setting_relations);
+        # return;
+
         cols_data = []
         line_format = '\t{:<%s}: {:<}' % cols_maxlen
         for col in cols:
@@ -627,6 +642,9 @@ class RedlimeFetcherCommand(sublime_plugin.TextCommand):
         content += BLOCK_LINE
         content += '\n'
 
+        # setting_relations = rl_get_setting('relations', true)
+        # sublime.status_message('entrou ' + setting_relations)
+
         if issue.children:
             content += '## SubIssues\n'
             content += BLOCK_LINE
@@ -638,16 +656,18 @@ class RedlimeFetcherCommand(sublime_plugin.TextCommand):
             content += BLOCK_LINE
             content += '\n'
 
-        if issue.relations:
-            content += '## Relations\n'
-            content += BLOCK_LINE
-            try:
-                for rel in issue.relations:
-                    content += '\t%s: **%s**\n' % (rel.issue_to_id, rel.relation_type)
-            except Exception as e:
-                print(e)
-            content += BLOCK_LINE
-            content += '\n'
+        # Validate if setting 'relations' is true
+        if setting_relations:
+            if issue.relations:
+                content += '## Relations\n'
+                content += BLOCK_LINE
+                try:
+                    for rel in issue.relations:
+                        content += '\t%s: **%s**\n' % (rel.issue_to_id, rel.relation_type)
+                except Exception as e:
+                    print(e)
+                content += BLOCK_LINE
+                content += '\n'
 
         if issue.attachments:
             content += '## Attachments\n'
@@ -887,12 +907,22 @@ class RedlimeAssignFilterCommand(sublime_plugin.TextCommand):
 
         # validate
         rl_validate_screen('redlime_query')
+        queries_filters = rl_get_setting('assigned_to_query_id_filter', [])  # user query filter
+
+        # if queries_filters:
+        #     self.issues = []
+        #     self.issues_menu =
 
         self.users = []
         self.users_menu = ['*All users']
         redmine = Redlime.connect()
         groups = rl_get_setting('assigned_to_group_id_filter', [])  # user group filter
-        if groups:
+        if queries_filters:
+            for query_filter_id in queries_filters:
+                for issue in redmine.issue.filter(query_id=query_filter_id):
+                    # if user.id not in [user.id for user in self.users]:
+                        self.users.append(issue)
+        elif groups:
             for group_id in groups:
                 for user in redmine.user.filter(group_id=group_id):
                     if user.id not in [user.id for user in self.users]:
@@ -902,10 +932,12 @@ class RedlimeAssignFilterCommand(sublime_plugin.TextCommand):
             project_id = query_params.get('project_id')
             self.users = [redmine.user.get(user.user.id) for user in redmine.project_membership.filter(project_id=project_id) if hasattr(user, 'user')]
 
-        if self.users:
-            for user in self.users:
-                self.users_menu.append('%s %s' % (user.firstname, user.lastname))
-            self.view.window().show_quick_panel(self.users_menu, self.on_done)
+        if not queries_filters:
+
+            if self.users:
+                for user in self.users:
+                    self.users_menu.append('%s %s' % (user.firstname, user.lastname))
+                self.view.window().show_quick_panel(self.users_menu, self.on_done)
 
     def on_done(self, idx):
         query_params = self.view.settings().get('query_params', {})
